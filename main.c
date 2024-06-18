@@ -12,11 +12,12 @@
 #define IMAGE_WIDTH 128
 #define IMAGE_HEIGHT 128
 #define IMAGE_CHANNELS 3
-#define TRAIN_COUNT 1000
+#define HIDDEN_SIZE 16
+#define TRAIN_COUNT 100
 
 #define CAT_LABEL 1.0
 #define DOG_LABEL 0.0
-#define EPOCHS 10
+#define EPOCHS 100
 #define LEARNING_RATE 0.5
 
 float cat_train[TRAIN_COUNT][IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS] = {0};
@@ -30,6 +31,18 @@ float dot_product(const float *xs, const float *ys, int n) {
         sum += xs[i] * ys[i];
     }
     return sum;
+}
+
+void mul_matrix_vector(const float *matrix, const float *xs, float *result, int rows, int cols) {
+    for (int i = 0; i < rows; i++) {
+        result[i] = dot_product(matrix + i * cols, xs, cols);
+    }
+}
+
+void add_vecs(const float *xs, const float *ys, float *result, int n) {
+    for (int i = 0; i < n; i++) {
+        result[i] = xs[i] + ys[i];
+    }
 }
 
 void load_image(const char *filename, float *image) {
@@ -61,17 +74,28 @@ float sigmoid(float x) {
 
 typedef struct neural_network {
     float a_0[IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS];
-    float w_1[IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS];
-    float b_1;
-    float z_1;
-    float a_1;
+    float w_1[IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS][HIDDEN_SIZE];
+    float b_1[HIDDEN_SIZE];
+    float z_1[HIDDEN_SIZE];
+    float a_1[HIDDEN_SIZE];
+    float w_2[HIDDEN_SIZE];
+    float b_2;
+    float z_2;
+    float a_2;
 } neural_network;
 
 void nn_init(neural_network *nn) {
-    for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS; i++) {
-        nn->w_1[i] = rand11();
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        for (int j = 0; j < IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS; j++) {
+            nn->w_1[j][i] = rand11();
+        }
+        nn->b_1[i] = rand11();
     }
-    nn->b_1 = rand11();
+
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        nn->w_2[i] = rand11();
+    }
+    nn->b_2 = rand11();
 }
 
 float nn_loss(float y, float y_hat) {
@@ -80,30 +104,57 @@ float nn_loss(float y, float y_hat) {
 
 float nn_forward(neural_network *nn, float *x) {
     memcpy(nn->a_0, x, IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS * sizeof(float));
-    nn->z_1  = dot_product(nn->w_1, x, IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS) + nn->b_1;
-    nn->a_1 = sigmoid(nn->z_1);
+    mul_matrix_vector((float *)nn->w_1, x, nn->z_1, HIDDEN_SIZE, IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS);
+    add_vecs(nn->z_1, nn->b_1, nn->z_1, HIDDEN_SIZE);
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        nn->a_1[i] = sigmoid(nn->z_1[i]);
+    }
+    nn->z_2 = dot_product(nn->a_1, nn->w_2, HIDDEN_SIZE);
+    nn->a_2 = sigmoid(nn->z_2);
 
-    return nn->a_1;
+    return nn->a_2;
 }
 
 void nn_gradient(neural_network *nn, float y_hat, neural_network *grad) {
-    // dC/dw_1 = dC/da_1 * da_1/dz_1 * dz_1/dw_1
-    float dC_da_1 = 2 * (nn->a_1 - y_hat);
-    float da_1_dz_1 = sigmoid(nn->a_1) * (1 - sigmoid(nn->a_1));
-    for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS; i++) {
-        float dz_1_dw_1 = nn->a_0[i];
-        grad->w_1[i] = dC_da_1 * da_1_dz_1 * dz_1_dw_1;
+    float dC_da_2 = 2 * (nn->a_2 - y_hat);
+    float da_2_dz_2 = sigmoid(nn->a_2) * (1 - sigmoid(nn->a_2));
+
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        // dC/dw_1 = dC/da_1 * da_1/dz_1 * dz_1/dw_1
+        // dC/da_1 = dC/da_2 * da_2/dz_2 * dz_2/da_1
+        float dC_da_1 = dC_da_2 * da_2_dz_2 * nn->w_2[i];
+        float da_1_dz_1 = sigmoid(nn->a_1[i]) * (1 - sigmoid(nn->a_1[i]));
+        for (int j = 0; j < IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS; j++) {
+            float dz_1_dw_1 = nn->a_0[j];
+            grad->w_1[j][i] = dC_da_1 * da_1_dz_1 * dz_1_dw_1;
+        }
+        // dC/db_1 = dC/da_1 * da_1/dz_1 * dz_1/db_1
+        float dz_1_db_1 = 1;
+        grad->b_2 = dC_da_1 * da_1_dz_1 * dz_1_db_1;
     }
-    // dC/db_1 = dC/da_1 * da_1/dz_1 * dz_1/db_1
-    float dz_1_db_1 = 1;
-    grad->b_1 = dC_da_1 * da_1_dz_1 * dz_1_db_1;
+
+    // dC/dw_2 = dC/da_2 * da_2/dz_2 * dz_2/dw_2
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        float dz_2_dw_2 = nn->a_1[i];
+        grad->w_2[i] = dC_da_2 * da_2_dz_2 * dz_2_dw_2;
+    }
+    // dC/db_2 = dC/da_2 * da_2/dz_2 * dz_2/db_2
+    float dz_2_db_2 = 1;
+    grad->b_2 = dC_da_2 * da_2_dz_2 * dz_2_db_2;
 }
 
 void nn_backward(neural_network *nn, neural_network *grad, float learning_rate) {
-    for (int i = 0; i < IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS; i++) {
-        nn->w_1[i] -= grad->w_1[i] * learning_rate;
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        for (int j = 0; j < IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS; j++) {
+            nn->w_1[j][i] -= grad->w_1[j][i] * learning_rate;
+        }
+        nn->b_1[i] -= grad->b_1[i] * learning_rate;
     }
-    nn->b_1 -= grad->b_1 * learning_rate;
+
+    for (int i = 0; i < HIDDEN_SIZE; i++) {
+        nn->w_2[i] -= grad->w_2[i] * learning_rate;
+    }
+    nn->b_2 -= grad->b_2 * learning_rate;
 }
 
 void learn(neural_network *nn, float train[][IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS], float y_hat, float learning_rate) {
