@@ -1,4 +1,5 @@
 import manim as m
+from nn import NeuralNetworkMobject
 
 
 class WParamIn(m.Scene):
@@ -217,3 +218,97 @@ class MinGradientDescent(m.Scene):
         self.play(x.animate.set_value(0.7376), y.animate.set_value(self.cost_w(0.7376)), run_time=2)
 
         self.wait(7)
+
+
+class MultiLocalMinima(m.Scene):
+    def cost_w(self, w):
+        return m.np.cos(3 * m.np.pi * w) / w
+
+    def construct(self):
+        ax = m.Axes(x_range=(0.1, 1.1), y_range=(-2, 2), x_length=8, y_length=5).scale(0.8)
+        y_label = ax.get_y_axis_label(
+            m.MathTex("{cost}_{w}").scale(0.65).rotate(90 * m.DEGREES),
+            edge=m.LEFT,
+            direction=m.LEFT,
+            buff=0.3,
+        )
+        x_label = ax.get_x_axis_label(
+            m.Text("w").scale(0.65),
+            edge=m.RIGHT,
+            direction=m.DOWN,
+            buff=0.3,
+        )
+
+        self.play(m.Create(ax), m.Write(x_label), m.Write(y_label))
+        self.wait(1)
+
+        curve = ax.plot(lambda x: self.cost_w(x), color=m.RED, x_range=(0.1, 1.1))
+        self.play(m.Create(curve))
+
+        self.wait(1)
+
+        xs = [m.ValueTracker(a) for a in [0.2, 0.4, 0.6, 0.8, 1.0]]
+        dots = m.always_redraw(lambda: m.VGroup(*[m.Dot().move_to(ax.coords_to_point(x.get_value(), self.cost_w(x.get_value()))) for x in xs]))
+
+        self.play(m.Write(dots))
+
+        self.wait(1)
+
+        min_xs = [0.296, 0.296, 0.296, 0.988, 0.988]
+        self.play(*[x.animate.set_value(min_x) for x, min_x in zip(xs, min_xs)], run_time=2)
+
+        self.wait(5)
+
+
+class Cost2DParameters(m.ThreeDScene):
+    def construct(self):
+        resolution_fa = 16
+        self.set_camera_orientation(phi=75 * m.DEGREES, theta=-60 * m.DEGREES)
+        axes = m.ThreeDAxes(x_range=(-3, 3, 1), y_range=(-3, 3, 1), z_range=(-5, 5, 1))
+
+        def param_trig(u, v):
+            x = u
+            y = v
+            z = 2 * m.np.sin(x) + 2 * m.np.cos(y)
+            return z
+
+        trig_plane = axes.plot_surface(
+            param_trig,
+            resolution=(resolution_fa, resolution_fa),
+            u_range=(-3, 3),
+            v_range=(-3, 3),
+            colorscale=[m.BLUE, m.GREEN, m.YELLOW, m.ORANGE, m.RED],
+        )
+
+        self.play(m.Create(axes), m.Write(trig_plane))
+
+        self.wait(5)
+
+
+class MultiDimensionalIntuition(m.Scene):
+    def construct(self):
+        text = m.MathTex(r"w, b").scale(1)
+        var_dim = m.Variable(2, m.Text("dim"), num_decimal_places=0).next_to(text, m.DOWN)
+        self.play(m.Write(text), m.Write(var_dim))
+        self.wait(3)
+
+        text_more = m.MathTex(r"w_1, w_2, \ldots, w_n, b").scale(1)
+        var_dim_tracker = var_dim.tracker
+
+        self.play(
+            var_dim_tracker.animate.set_value(128*128*3+1),
+            m.TransformMatchingShapes(text, text_more)
+        )
+        self.wait(5)
+
+
+class Perceptron(m.Scene):
+    def construct(self):
+        nn = NeuralNetworkMobject([128*128*3, 1])
+        nn.label_inputs("x")
+        nn.label_outputs("y")
+        nn.label_outputs_text(["is\ cat?"])
+
+        nn.scale(0.75)
+        self.play(m.Write(nn))
+        self.wait(5)
