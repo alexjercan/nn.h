@@ -70,7 +70,22 @@ float nn_forward(const neural_network *nn, float *x) {
     return y;
 }
 
+int compute_true_positive(neural_network *nn, float train[][IMAGE_WIDTH * IMAGE_HEIGHT * IMAGE_CHANNELS], float y_hat) {
+    int count = 0;
+    for (int i = 0; i < TRAIN_COUNT; i++) {
+        float y = nn_forward(nn, train[i]);
+        if (round(y) == y_hat) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
 int main() {
+    int total = 0;
+    int correct = 0;
+
     srand(time(NULL));
     neural_network nn;
 
@@ -79,22 +94,7 @@ int main() {
     load_dataset("./data/train", "cat", TRAIN_COUNT, cat_train);
     load_dataset("./data/train", "dog", TRAIN_COUNT, dog_train);
 
-    int total = 2 * TRAIN_COUNT;
-    int correct = 0;
-    for (int i = 0; i < TRAIN_COUNT; i++) {
-        float prediction = nn_forward(&nn, cat_train[i]);
-
-        if (prediction >= 0.5) {
-            correct++;
-        }
-    }
-    for (int i = 0; i < TRAIN_COUNT; i++) {
-        float prediction = nn_forward(&nn, dog_train[i]);
-
-        if (prediction < 0.5) {
-            correct++;
-        }
-    }
-
+    total = 2 * TRAIN_COUNT;
+    correct = compute_true_positive(&nn, cat_train, 1.0) + compute_true_positive(&nn, dog_train, 0.0);
     printf("%f\n", correct / (float)total);
 }
