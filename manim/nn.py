@@ -10,7 +10,7 @@ class NeuralNetworkMobject(VGroup):
         "layer_to_layer_buff": LARGE_BUFF,
         "output_neuron_color": YELLOW,
         "input_neuron_color": BLUE,
-        "hidden_layer_neuron_color": WHITE,
+        "hidden_layer_neuron_color": RED,
         "neuron_stroke_width": 2,
         "neuron_fill_color": GREEN,
         "edge_color": LIGHT_GREY,
